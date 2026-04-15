@@ -6,20 +6,33 @@ const path = require("path")
 const os = require("os")
 
 function run(target) {
-  const result = childProcess.spawnSync(target, process.argv.slice(2), {
+  const child = childProcess.spawn(target, process.argv.slice(2), {
     stdio: "inherit",
   })
-  if (result.error) {
-    console.error(result.error.message)
+  child.on("error", (err) => {
+    console.error(err.message)
     process.exit(1)
+  })
+  const forward = (sig) => {
+    if (!child.killed) {
+      try { child.kill(sig) } catch {}
+    }
   }
-  const code = typeof result.status === "number" ? result.status : 0
-  process.exit(code)
+  ;["SIGINT", "SIGTERM", "SIGHUP"].forEach((sig) => {
+    process.on(sig, () => forward(sig))
+  })
+  child.on("exit", (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal)
+      return
+    }
+    process.exit(typeof code === "number" ? code : 1)
+  })
 }
 
 const envPath = process.env.OPENCODE_BIN_PATH
 if (envPath) {
-  run(envPath)
+  return run(envPath)
 }
 
 const scriptPath = fs.realpathSync(__filename)
@@ -28,7 +41,7 @@ const scriptDir = path.dirname(scriptPath)
 //
 const cached = path.join(scriptDir, ".opencode")
 if (fs.existsSync(cached)) {
-  run(cached)
+  return run(cached)
 }
 
 const platformMap = {
