@@ -1,9 +1,12 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { InstanceState } from "@/effect/instance-state"
+import { Log } from "@/util/log"
 import { SessionID } from "./schema"
 import { Effect, Layer, Context } from "effect"
 import z from "zod"
+
+const log = Log.create({ service: "session-status" })
 
 export namespace SessionStatus {
   export const Info = z
@@ -71,6 +74,12 @@ export namespace SessionStatus {
 
       const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
         const data = yield* InstanceState.get(state)
+        const prev = data.get(sessionID)
+        log.info("session status change", {
+          sessionID,
+          from: prev?.type ?? "idle",
+          to: status.type,
+        })
         yield* bus.publish(Event.Status, { sessionID, status })
         if (status.type === "idle") {
           yield* bus.publish(Event.Idle, { sessionID })

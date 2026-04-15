@@ -17,8 +17,49 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { Effect, Option } from "effect"
 import { WorkspaceRoutes } from "./workspace"
+import { PushRelay } from "../push-relay"
+import * as QRCode from "qrcode"
 import { Agent } from "@/agent/agent"
 import { HttpApiRoutes } from "./httpapi"
+
+const PushPairPayload = z
+  .object({
+    relaySecret: z.string(),
+    hosts: z.array(z.string()),
+  })
+  .meta({ ref: "PushPairPayload" })
+
+const PushPairResult = z
+  .discriminatedUnion("enabled", [
+    z.object({
+      enabled: z.literal(false),
+    }),
+    z.object({
+      enabled: z.literal(true),
+      hosts: z.array(z.string()),
+      link: z.string(),
+      qr: z.string(),
+    }),
+  ])
+  .meta({ ref: "PushPairResult" })
+
+const pushPairQROptions = {
+  errorCorrectionLevel: "M" as const,
+  margin: 1,
+  width: 256,
+}
+
+function pushPairLink(input: { relaySecret: string; hosts: string[] }) {
+  const payload: z.infer<typeof PushPairPayload> = {
+    relaySecret: input.relaySecret,
+    hosts: input.hosts,
+  }
+  return `mobilevoice:///?pair=${encodeURIComponent(JSON.stringify(payload))}`
+}
+
+async function pushPairQRCode(input: { relaySecret: string; hosts: string[] }) {
+  return QRCode.toDataURL(pushPairLink(input), pushPairQROptions)
+}
 
 const ConsoleOrgOption = z.object({
   accountID: z.string(),
@@ -420,6 +461,135 @@ export const ExperimentalRoutes = lazy(() =>
             }),
           ),
         )
+      },
+    )
+    .get(
+      "/push/pair",
+      describeRoute({
+        summary: "Get push relay pairing QR",
+        description: "Get the active push relay pairing payload and QR code for mobile setup.",
+        operationId: "experimental.push.pair",
+        responses: {
+          200: {
+            description: "Push relay pairing info",
+            content: {
+              "application/json": {
+                schema: resolver(PushPairResult),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const pair = PushRelay.pair()
+        if (!pair) {
+          return c.json({
+            enabled: false,
+          })
+        }
+
+        const link = pushPairLink(pair)
+        const qr = await pushPairQRCode(pair)
+
+        return c.json({
+          enabled: true,
+          hosts: pair.hosts,
+          link,
+          qr,
+        })
+      },
+    )
+    .get(
+      "/push",
+      describeRoute({
+        summary: "Get push relay status",
+        description: "Get experimental push relay runtime status for this server.",
+        operationId: "experimental.push.status",
+        responses: {
+          200: {
+            description: "Push relay status",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    enabled: z.boolean(),
+                    relaySecretSet: z.boolean(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(PushRelay.status())
+      },
+    )
+    .post(
+      "/push/test",
+      describeRoute({
+        summary: "Send test push event",
+        description: "Send a test push event through the experimental APN relay integration.",
+        operationId: "experimental.push.test",
+        responses: {
+          200: {
+            description: "Test event accepted",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    ok: z.boolean(),
+                    enabled: z.boolean(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          secret: z.string(),
+          sessionID: z.string().optional(),
+          eventType: z.enum(["complete", "permission", "error"]).optional(),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        const status = PushRelay.status()
+        if (!status.enabled) {
+          return c.json(
+            {
+              data: { enabled: false },
+              errors: [{ message: "Push relay is not enabled" }],
+              success: false,
+            },
+            400,
+          )
+        }
+
+        if (!PushRelay.auth(body.secret)) {
+          return c.json(
+            {
+              data: { enabled: true },
+              errors: [{ message: "Invalid push relay secret" }],
+              success: false,
+            },
+            400,
+          )
+        }
+
+        const ok = PushRelay.test({
+          type: body.eventType ?? "permission",
+          sessionID: body.sessionID ?? `test-${Date.now()}`,
+        })
+
+        return c.json({
+          ok,
+          enabled: true,
+        })
       },
     ),
 )
