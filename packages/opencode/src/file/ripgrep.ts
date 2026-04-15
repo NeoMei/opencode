@@ -2,93 +2,108 @@ import fs from "fs/promises"
 import path from "path"
 import { fileURLToPath } from "url"
 import z from "zod"
-import { Cause, Context, Effect, Layer, Queue, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Queue, Schema, Stream } from "effect"
 import { ripgrep } from "ripgrep"
 import { makeRuntime } from "@/effect/run-service"
 import { Filesystem } from "@/util/filesystem"
 import { Log } from "@/util/log"
+import { zod } from "@/util/effect-zod"
 
 export namespace Ripgrep {
   const log = Log.create({ service: "ripgrep" })
-
-  const Stats = z.object({
-    elapsed: z.object({
-      secs: z.number(),
-      nanos: z.number(),
-      human: z.string(),
+  const stats = Schema.Struct({
+    elapsed: Schema.Struct({
+      secs: Schema.Number,
+      nanos: Schema.Number,
+      human: Schema.String,
     }),
-    searches: z.number(),
-    searches_with_match: z.number(),
-    bytes_searched: z.number(),
-    bytes_printed: z.number(),
-    matched_lines: z.number(),
-    matches: z.number(),
+    searches: Schema.Number,
+    searches_with_match: Schema.Number,
+    bytes_searched: Schema.Number,
+    bytes_printed: Schema.Number,
+    matched_lines: Schema.Number,
+    matches: Schema.Number,
   })
 
-  const Begin = z.object({
-    type: z.literal("begin"),
-    data: z.object({
-      path: z.object({
-        text: z.string(),
+  const begin = Schema.Struct({
+    type: Schema.Literal("begin"),
+    data: Schema.Struct({
+      path: Schema.Struct({
+        text: Schema.String,
       }),
     }),
   })
 
-  export const Match = z.object({
-    type: z.literal("match"),
-    data: z.object({
-      path: z.object({
-        text: z.string(),
-      }),
-      lines: z.object({
-        text: z.string(),
-      }),
-      line_number: z.number(),
-      absolute_offset: z.number(),
-      submatches: z.array(
-        z.object({
-          match: z.object({
-            text: z.string(),
+  const item = Schema.Struct({
+    path: Schema.Struct({
+      text: Schema.String,
+    }),
+    lines: Schema.Struct({
+      text: Schema.String,
+    }),
+    line_number: Schema.Number,
+    absolute_offset: Schema.Number,
+    submatches: Schema.mutable(
+      Schema.Array(
+        Schema.Struct({
+          match: Schema.Struct({
+            text: Schema.String,
           }),
-          start: z.number(),
-          end: z.number(),
+          start: Schema.Number,
+          end: Schema.Number,
         }),
       ),
-    }),
+    ),
   })
 
-  const End = z.object({
-    type: z.literal("end"),
-    data: z.object({
-      path: z.object({
-        text: z.string(),
+  const match = Schema.Struct({
+    type: Schema.Literal("match"),
+    data: item,
+  })
+
+  const end = Schema.Struct({
+    type: Schema.Literal("end"),
+    data: Schema.Struct({
+      path: Schema.Struct({
+        text: Schema.String,
       }),
-      binary_offset: z.number().nullable(),
-      stats: Stats,
+      binary_offset: Schema.NullOr(Schema.Number),
+      stats,
     }),
   })
 
-  const Summary = z.object({
-    type: z.literal("summary"),
-    data: z.object({
-      elapsed_total: z.object({
-        human: z.string(),
-        nanos: z.number(),
-        secs: z.number(),
+  const summary = Schema.Struct({
+    type: Schema.Literal("summary"),
+    data: Schema.Struct({
+      elapsed_total: Schema.Struct({
+        human: Schema.String,
+        nanos: Schema.Number,
+        secs: Schema.Number,
       }),
-      stats: Stats,
+      stats,
     }),
   })
 
-  const Result = z.union([Begin, Match, End, Summary])
+  const result = Schema.Union([begin, match, end, summary])
 
+  const decode = Schema.decodeUnknownSync(Schema.fromJsonString(result))
+
+  export const Stats = zod(stats)
+  export const Begin = zod(begin)
+  export const Item = zod(item)
+  export const Match = zod(match)
+  export const End = zod(end)
+  export const Summary = zod(summary)
+  export const Result = zod(result)
+
+  export type Stats = z.infer<typeof Stats>
   export type Result = z.infer<typeof Result>
   export type Match = z.infer<typeof Match>
-  export type Item = Match["data"]
+  export type Item = z.infer<typeof Item>
   export type Begin = z.infer<typeof Begin>
   export type End = z.infer<typeof End>
   export type Summary = z.infer<typeof Summary>
-  export type Row = Match["data"]
+  export type Row = Item
 
   export interface SearchResult {
     items: Item[]
@@ -264,7 +279,7 @@ export namespace Ripgrep {
       .trim()
       .split(/\r?\n/)
       .filter(Boolean)
-      .map((line) => Result.parse(JSON.parse(line)))
+      .map((line) => decode(line))
       .flatMap((item) => (item.type === "match" ? [row(item.data)] : []))
   }
 
