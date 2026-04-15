@@ -13,6 +13,7 @@ const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
 const wintest = process.platform === "win32" ? test : test.skip
 const clear = (wait = false) => AppRuntime.runPromise(Config.Service.use((svc) => svc.invalidate(wait)))
 const load = () => AppRuntime.runPromise(Config.Service.use((svc) => svc.get()))
+const tuiGet = () => AppRuntime.runPromise(TuiConfig.Service.use((svc) => svc.get()))
 
 beforeEach(async () => {
   await clear(true)
@@ -83,7 +84,7 @@ test("keeps server and tui plugin merge semantics aligned", async () => {
     directory: tmp.path,
     fn: async () => {
       const server = await load()
-      const tui = await TuiConfig.get()
+      const tui = await tuiGet()
       const serverPlugins = (server.plugin ?? []).map((item) => Config.pluginSpecifier(item))
       const tuiPlugins = (tui.plugin ?? []).map((item) => Config.pluginSpecifier(item))
 
@@ -116,7 +117,7 @@ test("loads tui config with the same precedence order as server config paths", a
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.theme).toBe("local")
       expect(config.diff_style).toBe("stacked")
     },
@@ -144,7 +145,7 @@ test("migrates tui-specific keys from opencode.json when tui.json does not exist
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.theme).toBe("migrated-theme")
       expect(config.scroll_speed).toBe(5)
       expect(config.keybinds?.app_exit).toBe("ctrl+q")
@@ -184,7 +185,7 @@ test("migrates project legacy tui keys even when global tui.json already exists"
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.theme).toBe("project-migrated")
       expect(config.scroll_speed).toBe(2)
       expect(await Filesystem.exists(path.join(tmp.path, "tui.json"))).toBe(true)
@@ -216,7 +217,7 @@ test("drops unknown legacy tui keys during migration", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.theme).toBe("migrated-theme")
       expect(config.scroll_speed).toBe(2)
 
@@ -245,7 +246,7 @@ test("skips migration when opencode.jsonc is syntactically invalid", async () =>
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.theme).toBeUndefined()
       expect(config.scroll_speed).toBeUndefined()
       expect(await Filesystem.exists(path.join(tmp.path, "tui.json"))).toBe(false)
@@ -268,7 +269,7 @@ test("skips migration when tui.json already exists", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.diff_style).toBe("stacked")
       expect(config.theme).toBeUndefined()
 
@@ -293,7 +294,7 @@ test("continues loading tui config when legacy source cannot be stripped", async
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const config = await TuiConfig.get()
+        const config = await tuiGet()
         expect(config.theme).toBe("readonly-theme")
         expect(await Filesystem.exists(path.join(tmp.path, "tui.json"))).toBe(true)
 
@@ -326,7 +327,7 @@ test("migration backup preserves JSONC comments", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      await TuiConfig.get()
+      await tuiGet()
       const backup = await Filesystem.readText(path.join(tmp.path, "opencode.jsonc.tui-migration.bak"))
       expect(backup).toContain("// top-level comment")
       expect(backup).toContain("// nested comment")
@@ -349,7 +350,7 @@ test("migrates legacy tui keys across multiple opencode.json levels", async () =
   await Instance.provide({
     directory: path.join(tmp.path, "apps", "client"),
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.theme).toBe("nested-theme")
       expect(await Filesystem.exists(path.join(tmp.path, "tui.json"))).toBe(true)
       expect(await Filesystem.exists(path.join(tmp.path, "apps", "client", "tui.json"))).toBe(true)
@@ -373,7 +374,7 @@ test("flattens nested tui key inside tui.json", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.scroll_speed).toBe(3)
       expect(config.diff_style).toBe("stacked")
       // top-level keys take precedence over nested tui keys
@@ -398,7 +399,7 @@ test("top-level keys in tui.json take precedence over nested tui key", async () 
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.diff_style).toBe("auto")
       expect(config.scroll_speed).toBe(2)
     },
@@ -418,7 +419,7 @@ test("project config takes precedence over OPENCODE_TUI_CONFIG (matches OPENCODE
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       // project tui.json overrides the custom path, same as server config precedence
       expect(config.theme).toBe("project")
       // project also set diff_style, so that wins
@@ -438,7 +439,7 @@ test("merges keybind overrides across precedence layers", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.keybinds?.app_exit).toBe("ctrl+q")
       expect(config.keybinds?.theme_list).toBe("ctrl+k")
     },
@@ -451,7 +452,7 @@ wintest("defaults Ctrl+Z to input undo on Windows", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.keybinds?.terminal_suspend).toBe("none")
       expect(config.keybinds?.input_undo).toBe("ctrl+z,ctrl+-,super+z")
     },
@@ -468,7 +469,7 @@ wintest("keeps explicit input undo overrides on Windows", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.keybinds?.terminal_suspend).toBe("none")
       expect(config.keybinds?.input_undo).toBe("ctrl+y")
     },
@@ -485,7 +486,7 @@ wintest("ignores terminal suspend bindings on Windows", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.keybinds?.terminal_suspend).toBe("none")
       expect(config.keybinds?.input_undo).toBe("ctrl+z,ctrl+-,super+z")
     },
@@ -504,7 +505,7 @@ test("OPENCODE_TUI_CONFIG provides settings when no project config exists", asyn
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.theme).toBe("from-env")
       expect(config.diff_style).toBe("stacked")
     },
@@ -525,7 +526,7 @@ test("does not derive tui path from OPENCODE_CONFIG", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.theme).toBeUndefined()
     },
   })
@@ -551,7 +552,7 @@ test("applies env and file substitutions in tui.json", async () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const config = await TuiConfig.get()
+        const config = await tuiGet()
         expect(config.theme).toBe("env-theme")
         expect(config.keybinds?.app_exit).toBe("ctrl+q")
       },
@@ -579,7 +580,7 @@ test("applies file substitutions when first identical token is in a commented li
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.theme).toBe("resolved-theme")
     },
   })
@@ -603,7 +604,7 @@ test("loads managed tui config and gives it highest precedence", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.theme).toBe("managed-theme")
       expect(config.plugin).toEqual(["shared-plugin@2.0.0"])
       expect(config.plugin_origins).toEqual([
@@ -628,7 +629,7 @@ test("loads .opencode/tui.json", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.diff_style).toBe("stacked")
     },
   })
@@ -646,7 +647,7 @@ test("gracefully falls back when tui.json has invalid JSON", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.theme).toBe("managed-fallback")
       expect(config.keybinds).toBeDefined()
     },
@@ -668,7 +669,7 @@ test("supports tuple plugin specs with options in tui.json", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.plugin).toEqual([["acme-plugin@1.2.3", { enabled: true, label: "demo" }]])
       expect(config.plugin_origins).toEqual([
         {
@@ -705,7 +706,7 @@ test("deduplicates tuple plugin specs by name with higher precedence winning", a
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.plugin).toEqual([
         ["acme-plugin@2.0.0", { source: "project" }],
         ["second-plugin@3.0.0", { source: "project" }],
@@ -747,7 +748,7 @@ test("tracks global and local plugin metadata in merged tui config", async () =>
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.plugin).toEqual(["global-plugin@1.0.0", "local-plugin@2.0.0"])
       expect(config.plugin_origins).toEqual([
         {
@@ -792,7 +793,7 @@ test("merges plugin_enabled flags across config layers", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      const config = await TuiConfig.get()
+      const config = await tuiGet()
       expect(config.plugin_enabled).toEqual({
         "internal:sidebar-context": false,
         "demo.plugin": false,

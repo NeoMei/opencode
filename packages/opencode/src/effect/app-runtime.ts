@@ -47,6 +47,7 @@ import { Pty } from "@/pty"
 import { Installation } from "@/installation"
 import { ShareNext } from "@/share/share-next"
 import { SessionShare } from "@/share/session"
+import { TuiConfig } from "@/config/tui"
 
 export const AppLayer = Layer.mergeAll(
   Observability.layer,
@@ -95,6 +96,7 @@ export const AppLayer = Layer.mergeAll(
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
+  TuiConfig.defaultLayer,
 )
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })

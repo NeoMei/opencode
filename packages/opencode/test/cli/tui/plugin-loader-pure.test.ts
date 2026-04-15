@@ -4,7 +4,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
-import { TuiConfig } from "../../../src/config/tui"
+import { mockTuiService } from "../../fixture/tui-runtime"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
@@ -37,7 +37,7 @@ test("skips external tui plugins in pure mode", async () => {
   process.env.OPENCODE_PURE = "1"
   process.env.OPENCODE_PLUGIN_META_FILE = tmp.extra.meta
 
-  const get = spyOn(TuiConfig, "get").mockResolvedValue({
+  const restore = mockTuiService({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
     plugin_origins: [
       {
@@ -47,7 +47,6 @@ test("skips external tui plugins in pure mode", async () => {
       },
     ],
   })
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
@@ -56,8 +55,7 @@ test("skips external tui plugins in pure mode", async () => {
   } finally {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
-    get.mockRestore()
-    wait.mockRestore()
+    restore()
     if (pure === undefined) {
       delete process.env.OPENCODE_PURE
     } else {

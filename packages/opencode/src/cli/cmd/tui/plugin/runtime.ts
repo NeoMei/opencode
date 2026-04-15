@@ -15,6 +15,7 @@ import { fileURLToPath } from "url"
 
 import { Config } from "@/config/config"
 import { TuiConfig } from "@/config/tui"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Log } from "@/util/log"
 import { errorData, errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
@@ -794,7 +795,10 @@ async function addPluginBySpec(state: RuntimeState | undefined, raw: string) {
 
   const ready = await Instance.provide({
     directory: state.directory,
-    fn: () => resolveExternalPlugins([cfg], () => TuiConfig.waitForDependencies()),
+    fn: () =>
+      resolveExternalPlugins([cfg], () =>
+        AppRuntime.runPromise(TuiConfig.Service.use((svc) => svc.waitForDependencies())),
+      ),
   }).catch((error) => {
     fail("failed to add tui plugin", { path: next, error })
     return [] as PluginLoad[]
@@ -991,7 +995,7 @@ export namespace TuiPluginRuntime {
     await Instance.provide({
       directory: cwd,
       fn: async () => {
-        const config = await TuiConfig.get()
+        const config = await AppRuntime.runPromise(TuiConfig.Service.use((svc) => svc.get()))
         const records = Flag.OPENCODE_PURE ? [] : (config.plugin_origins ?? [])
         if (Flag.OPENCODE_PURE && config.plugin_origins?.length) {
           log.info("skipping external tui plugins in pure mode", { count: config.plugin_origins.length })
@@ -1011,7 +1015,9 @@ export namespace TuiPluginRuntime {
           })
         }
 
-        const ready = await resolveExternalPlugins(records, () => TuiConfig.waitForDependencies())
+        const ready = await resolveExternalPlugins(records, () =>
+          AppRuntime.runPromise(TuiConfig.Service.use((svc) => svc.waitForDependencies())),
+        )
         await addExternalPluginEntries(next, ready)
 
         applyInitialPluginEnabledState(next, config)

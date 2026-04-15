@@ -4,6 +4,7 @@ import { tui } from "./app"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
+import { AppRuntime } from "@/effect/app-runtime"
 import { existsSync } from "fs"
 
 export const AttachCommand = cmd({
@@ -68,7 +69,7 @@ export const AttachCommand = cmd({
       })()
       const config = await Instance.provide({
         directory: directory && existsSync(directory) ? directory : process.cwd(),
-        fn: () => TuiConfig.get(),
+        fn: () => AppRuntime.runPromise(TuiConfig.Service.use((svc) => svc.get())),
       })
       await tui({
         url: args.url,

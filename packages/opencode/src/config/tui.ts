@@ -12,7 +12,6 @@ import { isRecord } from "@/util/record"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { InstanceState } from "@/effect/instance-state"
-import { makeRuntime } from "@/effect/run-service"
 import { AppFileSystem } from "@/filesystem"
 
 export namespace TuiConfig {
@@ -169,16 +168,6 @@ export namespace TuiConfig {
   )
 
   export const defaultLayer = layer.pipe(Layer.provide(Config.defaultLayer))
-
-  const { runPromise } = makeRuntime(Service, defaultLayer)
-
-  export async function get() {
-    return runPromise((svc) => svc.get())
-  }
-
-  export async function waitForDependencies() {
-    await runPromise((svc) => svc.waitForDependencies())
-  }
 
   async function loadFile(filepath: string): Promise<Info> {
     const text = await ConfigPaths.readFile(filepath)

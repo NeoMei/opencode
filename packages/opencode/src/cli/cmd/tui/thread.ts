@@ -15,6 +15,7 @@ import type { EventSource } from "./context/sdk"
 import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
+import { AppRuntime } from "@/effect/app-runtime"
 import { writeHeapSnapshot } from "v8"
 
 declare global {
@@ -179,7 +180,7 @@ export const TuiThreadCommand = cmd({
       const prompt = await input(args.prompt)
       const config = await Instance.provide({
         directory: cwd,
-        fn: () => TuiConfig.get(),
+        fn: () => AppRuntime.runPromise(TuiConfig.Service.use((svc) => svc.get())),
       })
 
       const network = await resolveNetworkOptions(args)

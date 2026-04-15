@@ -4,7 +4,7 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
-import { TuiConfig } from "../../../src/config/tui"
+import { mockTuiService } from "../../fixture/tui-runtime"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
@@ -39,7 +39,7 @@ test("toggles plugin runtime state by exported id", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const get = spyOn(TuiConfig, "get").mockResolvedValue({
+  const restore = mockTuiService({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
     plugin_enabled: {
       "demo.toggle": false,
@@ -52,7 +52,6 @@ test("toggles plugin runtime state by exported id", async () => {
       },
     ],
   })
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const api = createTuiPluginApi()
 
@@ -85,8 +84,7 @@ test("toggles plugin runtime state by exported id", async () => {
   } finally {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
-    get.mockRestore()
-    wait.mockRestore()
+    restore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }
 })
@@ -117,7 +115,7 @@ test("kv plugin_enabled overrides tui config on startup", async () => {
   })
 
   process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
-  const get = spyOn(TuiConfig, "get").mockResolvedValue({
+  const restore = mockTuiService({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
     plugin_enabled: {
       "demo.startup": false,
@@ -130,7 +128,6 @@ test("kv plugin_enabled overrides tui config on startup", async () => {
       },
     ],
   })
-  const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const api = createTuiPluginApi()
   api.kv.set("plugin_enabled", {
@@ -152,8 +149,7 @@ test("kv plugin_enabled overrides tui config on startup", async () => {
   } finally {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
-    get.mockRestore()
-    wait.mockRestore()
+    restore()
     delete process.env.OPENCODE_PLUGIN_META_FILE
   }
 })
